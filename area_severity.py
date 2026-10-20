@@ -1,13 +1,3 @@
-"""
-area_severity.py
-=================
-Computes the affected-area percentage from a segmentation mask, and maps it
-to a project-defined severity band (Low / Moderate / High).
-
-This is intentionally kept as a small, standalone module so it can be
-imported by both the Streamlit app and any evaluation scripts.
-"""
-
 import numpy as np
 
 

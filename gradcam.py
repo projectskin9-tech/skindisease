@@ -1,17 +1,3 @@
-"""
-gradcam.py
-==========
-Grad-CAM explainability for the trained classification model.
-Generates a heatmap showing which regions of the image most influenced
-the predicted disease category, and overlays it on the original image.
-
-Can be used as a standalone script or imported into the Streamlit app.
-
-Usage (standalone):
-    python gradcam.py --model outputs/mobilenet_final.h5 --image sample.jpg \
-        --last_conv_layer Conv_1 --class_indices outputs/class_indices.json
-"""
-
 import json
 import argparse
 import numpy as np
