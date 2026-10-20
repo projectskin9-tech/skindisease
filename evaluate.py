@@ -1,21 +1,3 @@
-"""
-evaluate.py
-===========
-Generates official evaluation metrics for your project report:
-    - Classifier: accuracy, precision, recall, F1, confusion matrix
-    - Segmentation: IoU, Dice coefficient
-
-Run this AFTER training both models. It rebuilds the architectures and
-loads the saved WEIGHTS (same approach as app.py) to avoid Keras version
-mismatch issues.
-
-Usage:
-    python evaluate.py --data_dir dataset --seg_data_dir seg_dataset \
-        --classifier_weights outputs/mobilenet_classifier.weights.h5 \
-        --seg_weights outputs_seg/unet_seg.weights.h5 \
-        --class_indices outputs/class_indices.json
-"""
-
 import os
 import json
 import argparse

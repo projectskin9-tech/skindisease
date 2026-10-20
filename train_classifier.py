@@ -1,32 +1,3 @@
-"""
-train_classifier.py
-===================
-Improved HAM10000 7-class skin-lesion classifier.
-
-Main improvements over the previous version:
-    - ImageNet-pretrained MobileNetV2
-    - Stronger but realistic augmentation
-    - Balanced class weighting using sqrt-inverse frequency
-    - Two-stage training
-    - BatchNorm kept in inference mode during fine-tuning
-    - Model selection based on validation macro-F1
-    - Final test classification report + confusion matrix
-    - Saves weights in the exact format expected by app.py
-
-Expected:
-    dataset/
-        train/{akiec,bcc,bkl,df,mel,nv,vasc}/...
-        val/{akiec,bcc,bkl,df,mel,nv,vasc}/...
-        test/{akiec,bcc,bkl,df,mel,nv,vasc}/...
-
-Usage in Colab:
-    python train_classifier.py \
-        --data_dir dataset \
-        --model mobilenet \
-        --epochs 25 \
-        --fine_tune_epochs 15
-"""
-
 import os
 import argparse
 import json

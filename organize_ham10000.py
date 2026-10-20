@@ -1,22 +1,3 @@
-"""
-organize_ham10000.py
-=====================
-HAM10000 (Kaggle) usually comes as:
-    HAM10000_images_part_1/  *.jpg
-    HAM10000_images_part_2/  *.jpg
-    HAM10000_metadata.csv   (columns include: image_id, dx, ...)
-
-This script sorts those images into class folders and splits them into
-train / val / test, ready for `train_classifier.py`.
-
-Usage:
-    python organize_ham10000.py \
-        --images_dirs HAM10000_images_part_1 HAM10000_images_part_2 \
-        --metadata HAM10000_metadata.csv \
-        --output_dir dataset \
-        --val_split 0.15 --test_split 0.15
-"""
-
 import os
 import shutil
 import argparse

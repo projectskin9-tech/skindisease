@@ -1,27 +1,3 @@
-"""
-train_segmentation.py
-======================
-Trains a U-Net model to segment the affected skin region (lesion) from an image,
-producing a binary mask used later for affected-area percentage calculation.
-
-Expected dataset structure:
-
-    seg_dataset/
-        train/
-            images/   *.jpg or *.png
-            masks/    *.png   (same filename as corresponding image; binary mask)
-        val/
-            images/
-            masks/
-
-Masks should be single-channel images where affected pixels = 255 (or 1) and
-background = 0. Datasets like ISIC Archive provide lesion segmentation masks
-in this style.
-
-Usage:
-    python train_segmentation.py --data_dir seg_dataset --epochs 50
-"""
-
 import os
 import argparse
 import numpy as np
