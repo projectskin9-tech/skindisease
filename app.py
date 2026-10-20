@@ -1,24 +1,3 @@
-"""
-app.py
-======
-Streamlit application for:
-- HAM10000 7-class skin lesion classification
-- U-Net lesion segmentation
-- Affected-area percentage
-- Project-defined affected-area level
-- Cancer-status grouping
-- Grad-CAM explanation
-
-Run:
-    streamlit run app.py
-
-IMPORTANT:
-The classifier output is an academic model prediction, not a medical diagnosis.
-The cancer-status grouping is a broad dataset/class grouping.
-The affected-area level is an image-based project indicator, NOT clinical
-disease severity.
-"""
-
 import numpy as np
 import cv2
 import streamlit as st
