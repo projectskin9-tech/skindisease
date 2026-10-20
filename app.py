@@ -39,6 +39,8 @@ from area_severity import (
 
 # Corrected EfficientNet 7-class model
 CLASSIFIER_MODEL_PATH = "skin_classifier_fixed.keras"
+SKIN_VALIDATOR_PATH = "skin_validator_compatible.keras"
+SKIN_THRESHOLD = 0.5  # Assumes validator output 1 means skin; verify training labels.
 
 # Existing U-Net segmentation weights
 SEGMENTATION_WEIGHTS_PATH = "outputs_seg/unet_seg.weights.h5"
@@ -228,6 +230,45 @@ def load_classifier():
 
 
 @st.cache_resource
+def load_skin_validator():
+    """Load binary skin/non-skin validator with Keras compatibility fix."""
+    from keras.layers import Dense
+
+    original_from_config = Dense.from_config
+
+    Dense.from_config = classmethod(
+        lambda cls, config: original_from_config.__func__(
+            cls,
+            {k: v for k, v in config.items()
+             if k != "quantization_config"}
+        )
+    )
+
+    try:
+        model = tf.keras.models.load_model(
+            SKIN_VALIDATOR_PATH,
+            compile=False
+        )
+        return model
+    finally:
+        Dense.from_config = original_from_config
+
+
+def validate_skin_image(pil_image, validator):
+    image = pil_image.convert("RGB").resize(CLS_IMG_SIZE)
+
+    # Raw pixel values: 0–255
+    arr = np.asarray(image, dtype=np.float32)
+    arr = np.expand_dims(arr, axis=0)
+
+    score = float(
+        np.asarray(validator.predict(arr, verbose=0)).reshape(-1)[0]
+    )
+
+    return score >= SKIN_THRESHOLD, score
+
+
+@st.cache_resource
 def load_segmentation_model():
     """Load the existing U-Net model from weights."""
 
@@ -347,129 +388,51 @@ def run_segmentation(
 # GRAD-CAM
 # ============================================================================
 
-def run_gradcam(
-    arr_preprocessed,
-    model,
-    original_pil_image,
-    pred_index,
-):
-    """
-    Manual layer-by-layer Grad-CAM for the saved EfficientNet classifier.
 
-    Expected outer model structure:
-        Input
-        EfficientNetB0
-        GlobalAveragePooling2D
-        Dropout
-        Dense
-        Dropout
-        Dense
-    """
+   
+def run_gradcam(arr_preprocessed, model, original_pil_image, pred_index):
+    """Generate Grad-CAM from the classifier's final convolution layer."""
+    last_conv = model.get_layer("top_conv")
 
-    img_tensor = tf.convert_to_tensor(
-        arr_preprocessed,
-        dtype=tf.float32,
+    grad_model = tf.keras.Model(
+        inputs=model.inputs,
+        outputs=[last_conv.output, model.output],
     )
 
-    if len(model.layers) < 7:
-        raise ValueError(
-            "Unexpected classifier structure; "
-            "Grad-CAM requires the trained EfficientNet classification head."
-        )
-
-    base_model = model.layers[1]
-    gap_layer = model.layers[2]
-    dropout1 = model.layers[3]
-    dense1 = model.layers[4]
-    dropout2 = model.layers[5]
-    dense2 = model.layers[6]
+    image_tensor = tf.convert_to_tensor(
+        arr_preprocessed, dtype=tf.float32
+    )
 
     with tf.GradientTape() as tape:
-
-        conv_output = base_model(
-            img_tensor,
-            training=False,
+        conv_outputs, predictions = grad_model(
+            image_tensor, training=False
         )
+        class_score = predictions[:, int(pred_index)]
 
-        tape.watch(conv_output)
-
-        x = gap_layer(
-            conv_output,
-        )
-
-        x = dropout1(
-            x,
-            training=False,
-        )
-
-        x = dense1(x)
-
-        x = dropout2(
-            x,
-            training=False,
-        )
-
-        predictions = dense2(x)
-
-        class_channel = predictions[
-            :,
-            pred_index,
-        ]
-
-    grads = tape.gradient(
-        class_channel,
-        conv_output,
-    )
+    grads = tape.gradient(class_score, conv_outputs)
 
     if grads is None:
-        raise ValueError(
-            "Grad-CAM gradients could not be calculated."
-        )
+        raise ValueError("Grad-CAM gradients are unavailable.")
 
-    pooled_grads = tf.reduce_mean(
-        grads,
-        axis=(0, 1, 2),
-    )
+    weights = tf.reduce_mean(grads, axis=(1, 2), keepdims=True)
+    heatmap = tf.reduce_sum(weights * conv_outputs, axis=-1)[0]
+    heatmap = tf.maximum(heatmap, 0)
 
-    conv_output_single = conv_output[0]
+    max_value = tf.reduce_max(heatmap)
+    if float(max_value.numpy()) <= 1e-8:
+        raise ValueError("Grad-CAM heatmap is empty.")
 
-    heatmap = (
-        conv_output_single
-        @ pooled_grads[..., tf.newaxis]
-    )
+    heatmap = (heatmap / max_value).numpy()
 
-    heatmap = tf.squeeze(
-        heatmap,
-    )
-
-    heatmap = tf.maximum(
-        heatmap,
-        0,
-    )
-
-    heatmap = heatmap / (
-        tf.reduce_max(heatmap)
-        + 1e-8
-    )
-
-    heatmap = heatmap.numpy()
-
-    original_bgr = cv2.cvtColor(
-        np.array(original_pil_image),
-        cv2.COLOR_RGB2BGR,
-    )
+    original_rgb = np.asarray(original_pil_image.convert("RGB"))
+    original_bgr = cv2.cvtColor(original_rgb, cv2.COLOR_RGB2BGR)
 
     overlay_bgr = overlay_heatmap(
-        original_bgr,
-        heatmap,
+        original_bgr, heatmap, alpha=0.35
     )
 
-    overlay_rgb = cv2.cvtColor(
-        overlay_bgr,
-        cv2.COLOR_BGR2RGB,
-    )
+    return cv2.cvtColor(overlay_bgr, cv2.COLOR_BGR2RGB)
 
-    return overlay_rgb
 
 
 # ============================================================================
@@ -489,10 +452,7 @@ def main():
     )
 
     st.caption(
-        "Academic prototype. The classifier predicts one of the "
-        "7 HAM10000 classes. Cancer Status is a broad class grouping, "
-        "not a medical diagnosis. Affected Area/Level is an image-based "
-        "project indicator, not clinical disease severity."
+        "A deep learning-based application for skin lesion image analysis, combining disease classification, affected-area estimation, and visual interpretation through Grad-CAM."
     )
 
     # ------------------------------------------------------------------------
@@ -539,8 +499,27 @@ def main():
 
         st.image(
             pil_image,
-            use_container_width=True,
+            use_column_width=True,
         )
+
+    # ------------------------------------------------------------------------
+    # SKIN / NON-SKIN VALIDATION
+    # ------------------------------------------------------------------------
+
+    try:
+        validator = load_skin_validator()
+        is_skin, skin_score = validate_skin_image(pil_image, validator)
+        st.caption(f"Skin validator score: {skin_score:.3f}")
+        if not is_skin:
+            st.error("This image does not appear to be a skin image. Please upload a clear skin-lesion image.")
+            st.stop()
+    except FileNotFoundError:
+        st.error(f"Skin validator file not found: {SKIN_VALIDATOR_PATH}. Place it beside app.py.")
+        st.stop()
+    except Exception as e:
+        st.error("Skin validation failed. Disease classification was stopped to avoid classifying an unvalidated image.")
+        st.exception(e)
+        st.stop()
 
     # ------------------------------------------------------------------------
     # LOAD MODELS
@@ -682,7 +661,7 @@ def main():
 
         st.image(
             binary_mask * 255,
-            use_container_width=True,
+            use_column_width=True,
             clamp=True,
         )
 
@@ -878,7 +857,7 @@ def main():
 
         st.image(
             gradcam_overlay,
-            use_container_width=True,
+            use_column_width=True,
             caption=(
                 "Heatmap showing image regions that influenced "
                 "the classification prediction."
